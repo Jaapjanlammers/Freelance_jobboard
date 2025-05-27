@@ -12,7 +12,7 @@ export function Select({ value, onValueChange, children, className }: SelectProp
   const options = React.Children.toArray(children)
     .filter(child => React.isValidElement(child) && child.type === SelectContent)
     .flatMap(child =>
-      React.Children.toArray((child as React.ReactElement).props.children)
+      React.Children.toArray((child as React.ReactElement<any>).props.children)
         .filter(option => React.isValidElement(option) && option.type === SelectItem)
     );
 
@@ -20,7 +20,7 @@ export function Select({ value, onValueChange, children, className }: SelectProp
   const placeholder = React.Children.toArray(children)
     .filter(child => React.isValidElement(child) && child.type === SelectTrigger)
     .flatMap(child =>
-      React.Children.toArray((child as React.ReactElement).props.children)
+      React.Children.toArray((child as React.ReactElement<any>).props.children)
         .filter(val => React.isValidElement(val) && val.type === SelectValue)
     )[0];
 
