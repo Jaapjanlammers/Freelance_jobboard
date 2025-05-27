@@ -27,7 +27,7 @@ export default function JobBoard() {
   const [searchPills, setSearchPills] = useState<string[]>([]);
   const [locationFilter, setLocationFilter] = useState("all");
   const [user, setUser] = useState<any>(null);
-  const [confirmedSearch, setConfirmedSearch] = useState("");
+
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -66,14 +66,12 @@ if (!user) {
   );
 }
 
-const normalizedSearch = (confirmedSearch || searchTerm).trim().toLowerCase();
-
 const filteredJobs = jobs.filter((job) => {
   if (searchPills.length === 0) return true;
   return searchPills.some(pill =>
-    job.Title?.toLowerCase().includes(normalizedSearch) ||
-    job.Company?.toLowerCase().includes(normalizedSearch) ||
-    job.Location?.toLowerCase().includes(normalizedSearch)
+    job.Title?.toLowerCase().includes(pill) ||
+    job.Company?.toLowerCase().includes(pill) ||
+    job.Location?.toLowerCase().includes(pill)
   );
 }).filter((job) => {
   return (
@@ -82,23 +80,6 @@ const filteredJobs = jobs.filter((job) => {
     (locationFilter === "onsite" && job.Location !== "Remote")
   );
 });
-
-<input
-  placeholder="Search jobs, companies, or descriptions..."
-  value={searchTerm}
-  onChange={(e) => setSearchTerm(e.target.value)}
- onKeyDown={e => {
-  if (e.key === "Enter") {
-    const term = searchTerm.trim().toLowerCase();
-    if (term && !searchPills.includes(term)) {
-      setSearchPills([...searchPills, term]);
-    }
-    setSearchTerm("");
-    e.preventDefault();
-  }
-}}
-  style={{ flex: 1, padding: "0.75rem", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "1rem" }}
-/>
 
 if (loading)
   return (
@@ -184,7 +165,12 @@ return (
           onChange={(e) => setSearchTerm(e.target.value)}
           onKeyDown={e => {
             if (e.key === "Enter") {
-              setConfirmedSearch(searchTerm.trim());
+              const term = searchTerm.trim().toLowerCase();
+              if (term && !searchPills.includes(term)) {
+                setSearchPills([...searchPills, term]);
+              }
+              setSearchTerm("");
+              e.preventDefault();
             }
           }}
           style={{ flex: 1, padding: "0.75rem", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "1rem" }}
@@ -199,8 +185,7 @@ return (
           <option value="onsite">🏢 On-site</option>
         </select>
       </div>
-      
-          {/* Job List */}
+
           {/* Job List */}
       <div className="job-list">
         {filteredJobs.map((job) => (
