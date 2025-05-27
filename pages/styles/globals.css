@@ -1,0 +1,5 @@
+/* Add your global styles here if not using Tailwind CSS */
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
