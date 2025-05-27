@@ -1,2 +1,5 @@
-import "@fontsource/montserrat"; // npm install @fontsource/montserrat
-import '../styles/globals.css'
+import "@fontsource/montserrat";
+
+export default function Layout({ children }) {
+  return <>{children}</>;
+}

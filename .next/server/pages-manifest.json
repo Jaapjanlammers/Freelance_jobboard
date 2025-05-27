@@ -1,6 +1,11 @@
 {
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
+  "/auth/callback": "pages/auth/callback.html",
+  "/auth/confirm": "pages/auth/confirm.html",
+  "/": "pages/index.html",
+  "/jobs": "pages/jobs.html",
+  "/layout": "pages/layout.html",
   "/_document": "pages/_document.js",
-  "/jobs": "pages/jobs.js"
+  "/404": "pages/404.html"
 }
