@@ -17,7 +17,8 @@ interface Job {
   rate: string
   date: string
   Summary: string
-  urgent: boolean
+  URL: string
+  // urgent: boolean 
 }
 
 export default function JobBoard() {
@@ -28,7 +29,7 @@ export default function JobBoard() {
 
   useEffect(() => {
     async function fetchJobs() {
-      const { data, error } = await supabase.from("jobs").select("*")
+      const { data, error } = await supabase.from("Allgigs_All_vacancies_NEW").select("*")
       if (error) {
         console.error(error)
       } else {
@@ -102,7 +103,6 @@ export default function JobBoard() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-base font-semibold text-gray-900">{job.Title}</h3>
-                        {job.urgent && <Badge className="text-xs bg-secondary text-secondary-foreground">Urgent</Badge>}
                       </div>
                       <p className="text-sm text-gray-700 font-medium">{job.Company}</p>
                     </div>
@@ -133,6 +133,21 @@ export default function JobBoard() {
                 </div>
 
                 {/* Action Button */}
+                <div className="lg:ml-6 flex flex-col gap-2">
+                  {job.URL && (
+                    <a
+                      href={job.URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mb-2 text-blue-600 underline text-xs"
+                    >
+                      View Job
+                    </a>
+                  )}
+                  <Button className="w-full lg:w-auto bg-secondary hover:bg-secondary/90 text-secondary-foreground">
+                    Apply Now
+                  </Button>
+                </div>
                 <div className="lg:ml-6">
                   <Button className="w-full lg:w-auto bg-secondary hover:bg-secondary/90 text-secondary-foreground">
                     Apply Now
