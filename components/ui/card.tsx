@@ -1,12 +1,10 @@
-import React from "react";
+import React from "react"
 
-interface CardProps {
-  children: React.ReactNode;
-  className?: string;
+interface MyComponentProps {
+  children: React.ReactNode
+  className?: string
 }
 
-export function Card({ children, className }: CardProps) {
-  return <div className={className}>{children}</div>;
+export function MyComponent({ children, className }: MyComponentProps) {
+  return <div className={className}>{children}</div>
 }
-
-export default Card;

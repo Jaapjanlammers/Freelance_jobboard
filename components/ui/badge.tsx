@@ -1,12 +1,10 @@
-import React from "react";
+import React from "react"
 
-interface BadgeProps {
-  children: React.ReactNode;
-  className?: string;
+interface MyComponentProps {
+  children: React.ReactNode
+  className?: string
 }
 
-export function Badge({ children, className }: BadgeProps) {
-  return <span className={className}>{children}</span>;
+export function MyComponent({ children, className }: MyComponentProps) {
+  return <div className={className}>{children}</div>
 }
-
-export default Badge;
