@@ -2,6 +2,9 @@ import { useState } from "react";
 import { supabase } from "../../SupabaseClient";
 
 export default function LoginForm() {
+  const [name, setName] = useState("");
+  const [surname, setSurname] = useState("");
+  const [linkedin, setLinkedin] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -14,7 +17,18 @@ export default function LoginForm() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       setMessage(error ? error.message : "Logged in!");
     } else if (mode === "signup") {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (!error && data.user) {
+        // Insert profile info
+        await supabase.from("profiles").insert([
+          {
+            id: data.user.id,
+            name,
+            surname,
+            linkedin,
+          },
+        ]);
+      }
       setMessage(error ? error.message : "Check your email to confirm your account!");
     } else if (mode === "forgot") {
       const { error } = await supabase.auth.resetPasswordForEmail(email);
@@ -29,16 +43,11 @@ export default function LoginForm() {
         maxWidth: 400,
         margin: "2rem auto",
         padding: 24,
+        borderRadius: 8,
         background: "#fff",
-        borderRadius: 12,
-        boxShadow: "0 2px 8px #0001",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
       }}
     >
-      <h2 style={{ marginBottom: 16 }}>
-        {mode === "login" && "Login"}
-        {mode === "signup" && "Sign Up"}
-        {mode === "forgot" && "Forgot Password"}
-      </h2>
       <input
         type="email"
         placeholder="Email"
@@ -53,6 +62,54 @@ export default function LoginForm() {
           border: "1px solid #ccc",
         }}
       />
+
+      {mode === "signup" && (
+        <>
+          <input
+            type="text"
+            placeholder="First name"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            required
+            style={{
+              width: "100%",
+              marginBottom: 12,
+              padding: 8,
+              borderRadius: 6,
+              border: "1px solid #ccc",
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Surname"
+            value={surname}
+            onChange={e => setSurname(e.target.value)}
+            required
+            style={{
+              width: "100%",
+              marginBottom: 12,
+              padding: 8,
+              borderRadius: 6,
+              border: "1px solid #ccc",
+            }}
+          />
+          <input
+            type="url"
+            placeholder="LinkedIn URL"
+            value={linkedin}
+            onChange={e => setLinkedin(e.target.value)}
+            required
+            style={{
+              width: "100%",
+              marginBottom: 12,
+              padding: 8,
+              borderRadius: 6,
+              border: "1px solid #ccc",
+            }}
+          />
+        </>
+      )}
+
       {mode !== "forgot" && (
         <input
           type="password"
@@ -69,6 +126,7 @@ export default function LoginForm() {
           }}
         />
       )}
+
       <button
         type="submit"
         style={{
@@ -77,43 +135,66 @@ export default function LoginForm() {
           borderRadius: 6,
           background: "#4f46e5",
           color: "#fff",
-          fontWeight: "bold",
           border: "none",
-          marginBottom: 8,
+          marginBottom: 12,
+          fontWeight: 600,
+          fontSize: 16,
+          cursor: "pointer",
         }}
       >
         {mode === "login" && "Login"}
         {mode === "signup" && "Sign Up"}
-        {mode === "forgot" && "Send Reset Email"}
+        {mode === "forgot" && "Reset Password"}
       </button>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-        {mode !== "login" && (
-          <span
-            style={{ color: "#4f46e5", cursor: "pointer" }}
-            onClick={() => setMode("login")}
-          >
-            Login
-          </span>
-        )}
-        {mode !== "signup" && (
-          <span
-            style={{ color: "#4f46e5", cursor: "pointer" }}
-            onClick={() => setMode("signup")}
-          >
-            Sign Up
-          </span>
-        )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         {mode !== "forgot" && (
           <span
-            style={{ color: "#4f46e5", cursor: "pointer" }}
+            style={{ color: "#4f46e5", cursor: "pointer", fontSize: 14 }}
             onClick={() => setMode("forgot")}
           >
             Forgot?
           </span>
         )}
+        <span style={{ fontSize: 14 }}>
+          {mode === "login" && (
+            <>
+              No account?{" "}
+              <span
+                style={{ color: "#4f46e5", cursor: "pointer" }}
+                onClick={() => setMode("signup")}
+              >
+                Sign up
+              </span>
+            </>
+          )}
+          {mode === "signup" && (
+            <>
+              Already have an account?{" "}
+              <span
+                style={{ color: "#4f46e5", cursor: "pointer" }}
+                onClick={() => setMode("login")}
+              >
+                Login
+              </span>
+            </>
+          )}
+          {mode === "forgot" && (
+            <>
+              Remembered?{" "}
+              <span
+                style={{ color: "#4f46e5", cursor: "pointer" }}
+                onClick={() => setMode("login")}
+              >
+                Login
+              </span>
+            </>
+          )}
+        </span>
       </div>
+
       {message && (
-        <div style={{ marginTop: 12, color: message.includes("error") ? "red" : "green" }}>
+        <div style={{ marginTop: 12, color: message.toLowerCase().includes("error") ? "red" : "green" }}>
           {message}
         </div>
       )}

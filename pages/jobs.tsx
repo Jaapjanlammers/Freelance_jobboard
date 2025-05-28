@@ -29,7 +29,9 @@ export default function JobBoard() {
   const [searchPills, setSearchPills] = useState<string[]>([]);
   const [locationFilter, setLocationFilter] = useState("all");
   const [user, setUser] = useState<any>(null);
-
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const PAGE_SIZE = 1000;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -46,19 +48,27 @@ export default function JobBoard() {
     return () => { listener?.subscription.unsubscribe(); };
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    async function fetchJobs() {
-      const { data, error } = await supabase.from("Allgigs_All_vacancies_NEW").select("*");
-      if (error) {
-        console.error(error);
-      } else {
-        setJobs(data || []);
-      }
-      setLoading(false);
+useEffect(() => {
+  if (!user) return;
+  setLoading(true);
+  async function fetchJobs() {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("Allgigs_All_vacancies_NEW")
+      .select("*")
+      .range(from, to);
+    if (error) {
+      console.error(error);
+    } else {
+      setJobs(prev => page === 0 ? (data || []) : [...prev, ...(data || [])]);
+      setHasMore((data?.length || 0) === PAGE_SIZE);
     }
-    fetchJobs();
-  }, [user]);
+    setLoading(false);
+  }
+  fetchJobs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [user, page]);
 
 if (!user) {
   return (
@@ -68,20 +78,25 @@ if (!user) {
   );
 }
 
-const filteredJobs = jobs.filter((job) => {
-  if (searchPills.length === 0) return true;
-  return searchPills.some(pill =>
-    job.Title?.toLowerCase().includes(pill) ||
-    job.Company?.toLowerCase().includes(pill) ||
-    job.Location?.toLowerCase().includes(pill)
-  );
-}).filter((job) => {
-  return (
-    locationFilter === "all" ||
-    (locationFilter === "remote" && job.Location === "Remote") ||
-    (locationFilter === "onsite" && job.Location !== "Remote")
-  );
+const fuse = new Fuse(jobs, {
+  keys: ["Title", "Company", "Location"],
+  threshold: 0.4, // Adjust for more/less fuzziness
 });
+
+let filteredJobs = jobs;
+
+if (searchPills.length > 0) {
+  const searchString = searchPills.join(" ");
+  filteredJobs = fuse.search(searchString).map(result => result.item);
+}
+
+filteredJobs = filteredJobs.filter((job) =>
+  locationFilter === "all"
+    ? true
+    : locationFilter === "remote"
+    ? job.Location === "Remote"
+    : job.Location !== "Remote"
+);
 
 if (loading)
   return (
@@ -187,7 +202,25 @@ return (
           <option value="onsite">🏢 On-site</option>
         </select>
       </div>
-
+{hasMore && (
+  <button
+    onClick={() => setPage(page + 1)}
+    style={{
+      margin: "2rem auto",
+      display: "block",
+      padding: "12px 32px",
+      borderRadius: "8px",
+      background: "#4f46e5",
+      color: "#fff",
+      fontWeight: "bold",
+      border: "none",
+      fontSize: "1.1rem",
+      cursor: "pointer",
+    }}
+  >
+    Load More
+  </button>
+)}
           {/* Job List */}
       <div className="job-list">
         {filteredJobs.map((job) => (
