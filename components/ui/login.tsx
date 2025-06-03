@@ -14,11 +14,11 @@ export default function LoginForm() {
     e.preventDefault();
     setMessage("");
     if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      setMessage(error ? error.message : "Logged in!");
+      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+      setMessage(loginError ? loginError.message : "Logged in!");
     } else if (mode === "signup") {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (!error && data.user) {
+      const { data, error: signupError } = await supabase.auth.signUp({ email, password });
+      if (!signupError && data.user) {
         // Insert profile info
         await supabase.from("profiles").insert([
           {
@@ -29,10 +29,10 @@ export default function LoginForm() {
           },
         ]);
       }
-      setMessage(error ? error.message : "Check your email to confirm your account!");
+      setMessage(signupError ? signupError.message : "Check your email to confirm your account!");
     } else if (mode === "forgot") {
-      const { error } = await supabase.auth.resetPasswordForEmail(email);
-      setMessage(error ? error.message : "Password reset email sent!");
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
+      setMessage(resetError ? resetError.message : "Password reset email sent!");
     }
   };
 
@@ -147,7 +147,7 @@ export default function LoginForm() {
         {mode === "forgot" && "Reset Password"}
       </button>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: mode !== "forgot" ? "16px" : "0" }}>
         {mode !== "forgot" && (
           <span
             style={{ color: "#4f46e5", cursor: "pointer", fontSize: 14 }}
