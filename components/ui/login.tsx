@@ -31,8 +31,20 @@ export default function LoginForm() {
       }
       setMessage(signupError ? signupError.message : "Check your email to confirm your account!");
     } else if (mode === "forgot") {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
-      setMessage(resetError ? resetError.message : "Password reset email sent!");
+      try {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/callback?next=/jobs`
+        });
+        if (resetError) {
+          console.error("Password reset error:", resetError);
+          setMessage(`Error: ${resetError.message}`);
+        } else {
+          setMessage("Password reset email sent! Please check your inbox and spam folder.");
+        }
+      } catch (error) {
+        console.error("Unexpected error during password reset:", error);
+        setMessage("An unexpected error occurred. Please try again.");
+      }
     }
   };
 

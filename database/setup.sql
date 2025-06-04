@@ -39,10 +39,35 @@ CREATE TABLE IF NOT EXISTS job_postings_log (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create job email submissions table for tracking email-based submissions
+CREATE TABLE IF NOT EXISTS job_email_submissions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    submission_id TEXT NOT NULL UNIQUE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_email TEXT NOT NULL,
+    job_title TEXT NOT NULL,
+    company TEXT NOT NULL,
+    location TEXT NOT NULL,
+    rate TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    poster_name TEXT,
+    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    email_subject TEXT,
+    email_body TEXT,
+    user_agent TEXT,
+    ip_address INET,
+    status TEXT DEFAULT 'submitted' CHECK (status IN ('submitted', 'processed', 'approved', 'rejected')),
+    admin_notes TEXT,
+    processed_at TIMESTAMP WITH TIME ZONE,
+    processed_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Add RLS (Row Level Security) policies
 ALTER TABLE user_clearances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_additions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_postings_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_email_submissions ENABLE ROW LEVEL SECURITY;
 
 -- Policy for user_clearances: Users can read their own clearance
 CREATE POLICY "Users can view own clearance" ON user_clearances
@@ -77,6 +102,24 @@ CREATE POLICY "Authenticated users can log job postings" ON job_postings_log
 -- Policy for job_postings_log: Admins can view all logs
 CREATE POLICY "Admins can view all job postings logs" ON job_postings_log
     FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM user_clearances 
+            WHERE user_id = auth.uid() 
+            AND clearance_level IN ('admin', 'moderator')
+        )
+    );
+
+-- Policy for job_email_submissions: Users can view their own submissions
+CREATE POLICY "Users can view own job email submissions" ON job_email_submissions
+    FOR SELECT USING (auth.uid() = user_id);
+
+-- Policy for job_email_submissions: Allow inserts for authenticated users
+CREATE POLICY "Authenticated users can submit job emails" ON job_email_submissions
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Policy for job_email_submissions: Admins can view and update all submissions
+CREATE POLICY "Admins can manage all job email submissions" ON job_email_submissions
+    FOR ALL USING (
         EXISTS (
             SELECT 1 FROM user_clearances 
             WHERE user_id = auth.uid() 
