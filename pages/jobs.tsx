@@ -40,7 +40,12 @@ export default function JobBoard() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [showAddJobForm, setShowAddJobForm] = useState(false);
   const [userClearance, setUserClearance] = useState<string | null>(null);
-  const PAGE_SIZE = 1000;
+  const PAGE_SIZE = 30;
+  const [allJobs, setAllJobs] = useState<Job[]>([]);
+  // const paginatedJobs = filteredJobs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+
+
 
   // Debounce search term to improve performance
   useEffect(() => {
@@ -59,12 +64,12 @@ export default function JobBoard() {
         .select("clearance_level")
         .eq("user_id", userId)
         .single();
-      
+
       if (error) {
         console.log("No clearance record found for user, checking email domain");
         return null;
       }
-      
+
       return data?.clearance_level || null;
     } catch (error) {
       console.error("Error checking user clearance:", error);
@@ -75,16 +80,16 @@ export default function JobBoard() {
   // Function to check if user has permission to add jobs
   const hasAddJobPermission = (user: any, clearanceLevel: string | null): boolean => {
     if (!user) return false;
-    
+
     // Allow users with admin or moderator clearance
     if (clearanceLevel === "admin" || clearanceLevel === "moderator") {
       return true;
     }
-    
+
     // Allow users with specific email domains (backup method)
     const allowedDomains = ["admin.com", "moderator.com", "company.com"];
     const userDomain = user.email?.split("@")[1];
-    
+
     return allowedDomains.includes(userDomain);
   };
 
@@ -114,12 +119,12 @@ export default function JobBoard() {
     if (!user) return;
     setLoading(true);
     setPage(0); // Reset to first page
-    
+
     const { data, error } = await supabase
       .from("Allgigs_All_vacancies_NEW")
       .select("*")
       .range(0, PAGE_SIZE - 1);
-    
+
     if (error) {
       console.error(error);
     } else {
@@ -142,7 +147,7 @@ export default function JobBoard() {
       if (error) {
         console.error(error);
       } else {
-        setJobs(prev => page === 0 ? (data || []) : [...prev, ...(data || [])]);
+        setJobs(data || []);
         setHasMore((data?.length || 0) === PAGE_SIZE);
       }
       setLoading(false);
@@ -151,16 +156,41 @@ export default function JobBoard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, page]);
 
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    async function fetchJobs() {
+      const { data, error } = await supabase
+        .from("Allgigs_All_vacancies_NEW")
+        .select("*");
+
+      if (error) {
+        console.error(error);
+      } else {
+        setAllJobs(data || []);
+      }
+      setLoading(false);
+    }
+    fetchJobs();
+  }, [user]);
+
+
+
+
+
+
+
   // Helper function to categorize jobs by industry based on title and summary
   const categorizeJob = (job: Job): string => {
     const text = `${job.Title} ${job.Summary}`.toLowerCase();
-    
+
     // Helper function to check if a keyword exists with word boundaries
     const hasKeywordWithBoundary = (text: string, keyword: string): boolean => {
       // Normalize text by replacing underscores and other separators with spaces
       const normalizedText = text.replace(/[_\-]/g, ' ').toLowerCase();
       const normalizedKeyword = keyword.toLowerCase();
-      
+
       // For single words that need boundaries, use word boundary regex
       if (keyword.length <= 3 || ['hr', 'bi', 'ai', 'seo', 'sem', 'crm'].includes(keyword)) {
         const regex = new RegExp(`\\b${normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
@@ -169,7 +199,7 @@ export default function JobBoard() {
       // For longer phrases, use simple includes on normalized text
       return normalizedText.includes(normalizedKeyword);
     };
-    
+
     // Define industry keywords with priority scoring
     const industries = {
       "Design": {
@@ -241,31 +271,31 @@ export default function JobBoard() {
         score: 0
       }
     };
-    
+
     // Score each industry based on keyword matches
     for (const [industry, data] of Object.entries(industries)) {
       data.score = data.keywords.filter(keyword => hasKeywordWithBoundary(text, keyword)).length;
     }
-    
+
     // Find the industry with the highest score
     const bestMatch = Object.entries(industries)
       .filter(([, data]) => data.score > 0)
       .sort(([, a], [, b]) => b.score - a.score)[0];
-    
+
     const result = bestMatch ? bestMatch[0] : "Other";
-    
+
     return result;
   };
 
   // Calculate industry groups with job counts - MOVED TO TOP LEVEL
   const getIndustryGroups = useMemo(() => {
     const industryCount: { [key: string]: number } = {};
-    
+
     jobs.forEach(job => {
       const industry = categorizeJob(job);
       industryCount[industry] = (industryCount[industry] || 0) + 1;
     });
-    
+
     // Filter industries with more than 1 job
     return Object.entries(industryCount)
       .filter(([industry, count]) => count > 1)
@@ -281,7 +311,7 @@ export default function JobBoard() {
 
   // Memoize filtered jobs to avoid expensive filtering on every render - MOVED TO TOP LEVEL
   const filteredJobs = useMemo(() => {
-    let filtered = jobs;
+    let filtered = allJobs;
 
     // First, apply industry filtering if we have industry pills
     const industryPills = searchPills.filter(pill => {
@@ -304,13 +334,13 @@ export default function JobBoard() {
     // Apply search pills filtering (for non-industry terms)
     if (nonIndustryPills.length > 0) {
       const searchString = nonIndustryPills.join(" ");
-      
+
       // For short, specific terms (like "food"), use exact matching
       // For longer or multiple terms, use fuzzy search
-      const shouldUseExactMatch = nonIndustryPills.some(pill => 
+      const shouldUseExactMatch = nonIndustryPills.some(pill =>
         pill.length <= 6 && !pill.includes(" ")
       );
-      
+
       if (shouldUseExactMatch) {
         // Use exact string matching for precise terms
         filtered = filtered.filter((job) => {
@@ -371,17 +401,26 @@ export default function JobBoard() {
     }
 
     return filtered;
-  }, [jobs, searchPills, selectedIndustry, excludedTerms, disregardedPills, getIndustryGroups]);
+  }, [allJobs, searchPills, selectedIndustry, excludedTerms, disregardedPills, getIndustryGroups]);
+
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchPills, selectedIndustry, excludedTerms, disregardedPills]);
+
+  const paginatedJobs = useMemo(() => {
+    return filteredJobs.slice((page ?? 0) * PAGE_SIZE, ((page ?? 0) + 1) * PAGE_SIZE);
+  }, [filteredJobs, page]);
 
   // Helper function to check if a job is new (within 3 hours)
   const isJobNew = (job: Job): boolean => {
     const timestamp = job.created_at || job.inserted_at;
     if (!timestamp) return false;
-    
+
     const jobTime = new Date(timestamp);
     const now = new Date();
     const threeHoursAgo = new Date(now.getTime() - (3 * 60 * 60 * 1000)); // 3 hours in milliseconds
-    
+
     return jobTime > threeHoursAgo;
   };
 
@@ -389,6 +428,24 @@ export default function JobBoard() {
     await supabase.auth.signOut();
     setUser(null);
   };
+
+  const totalPages = Math.ceil(filteredJobs.length / PAGE_SIZE);
+
+  const getPageNumbers = () => {
+    const visiblePages = 10;
+    const half = Math.floor(visiblePages / 2);
+    let start = Math.max(0, page - half);
+    let end = start + visiblePages;
+
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(0, end - visiblePages);
+    }
+
+    return Array.from({ length: end - start }, (_, i) => start + i);
+  };
+
+  const pageNumbers = getPageNumbers();
 
   if (!user) {
     return (
@@ -479,7 +536,7 @@ export default function JobBoard() {
         >
           Upload new Gig
         </button>
-        
+
         {/* Logout Button */}
         <button
           onClick={handleLogout}
@@ -508,7 +565,7 @@ export default function JobBoard() {
       {/* Industry Groups */}
       {(() => {
         return getIndustryGroups.length > 0 && (
-          <div style={{ 
+          <div style={{
             marginBottom: "2rem",
             background: "#fff",
             borderRadius: "16px",
@@ -516,7 +573,7 @@ export default function JobBoard() {
             boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
             border: "1px solid #e5e7eb"
           }}>
-            <h3 style={{ 
+            <h3 style={{
               margin: "0 0 1rem 0",
               fontSize: "1.25rem",
               fontWeight: "600",
@@ -524,7 +581,7 @@ export default function JobBoard() {
             }}>
               Browse by Industry
             </h3>
-            <div style={{ 
+            <div style={{
               display: "flex",
               alignItems: "center",
               gap: "1rem"
@@ -561,8 +618,8 @@ export default function JobBoard() {
               >
                 <option value="">Select an industry...</option>
                 {getIndustryGroups.map(({ industry, count }) => (
-                  <option 
-                    key={industry} 
+                  <option
+                    key={industry}
                     value={industry}
                     disabled={searchPills.includes(industry.toLowerCase())}
                   >
@@ -570,7 +627,7 @@ export default function JobBoard() {
                   </option>
                 ))}
               </select>
-              
+
               {/* Industry Term Exclusion */}
               {selectedIndustry && (() => {
                 // Get the industry keywords for the selected industry
@@ -598,7 +655,7 @@ export default function JobBoard() {
                 };
 
                 const keywords = getIndustryKeywords(selectedIndustry);
-                
+
                 if (keywords.length === 0) return null;
 
                 return (
@@ -693,9 +750,9 @@ export default function JobBoard() {
                   </div>
                 );
               })()}
-              
+
               {/* Show currently selected industries as badges */}
-              <div style={{ 
+              <div style={{
                 display: "flex",
                 flexWrap: "wrap",
                 gap: "0.5rem",
@@ -764,336 +821,371 @@ export default function JobBoard() {
         );
       })()}
 
-  {searchPills.length > 0 && (
-    <div style={{ marginBottom: 12 }}>
-      <span style={{ 
-        fontSize: "0.875rem", 
-        fontWeight: "600", 
-        color: "#374151", 
-        marginRight: "12px" 
-      }}>
-        Include:
-      </span>
-      {searchPills.map((pill) => (
-        <span
-          key={pill}
-          style={{
-            display: "inline-block",
-            background: "#4f46e5",
-            color: "#fff",
-            borderRadius: "999px",
-            padding: "6px 16px",
-            marginRight: "8px",
-            fontWeight: "bold",
-            fontSize: "0.95rem",
-            marginBottom: "4px",
-          }}
-        >
-          {pill}
-          <span
-            style={{
-              marginLeft: 8,
-              cursor: "pointer",
-              fontWeight: "normal",
-              color: "#fff",
-            }}
-            onClick={() => {
-              const newPills = searchPills.filter(p => p !== pill);
-              setSearchPills(newPills);
-              logSearchPillsActivity(newPills, disregardedPills); // Log pill removal
-              // Clear industry selection and excluded terms if this industry is removed
-              if (selectedIndustry.toLowerCase() === pill) {
-                setSelectedIndustry("");
-                setExcludedTerms([]);
-              }
-            }}
-            title="Remove"
-          >
-            ×
+      {searchPills.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <span style={{
+            fontSize: "0.875rem",
+            fontWeight: "600",
+            color: "#374151",
+            marginRight: "12px"
+          }}>
+            Include:
           </span>
-        </span>
-      ))}
-    </div>
-  )}
+          {searchPills.map((pill) => (
+            <span
+              key={pill}
+              style={{
+                display: "inline-block",
+                background: "#4f46e5",
+                color: "#fff",
+                borderRadius: "999px",
+                padding: "6px 16px",
+                marginRight: "8px",
+                fontWeight: "bold",
+                fontSize: "0.95rem",
+                marginBottom: "4px",
+              }}
+            >
+              {pill}
+              <span
+                style={{
+                  marginLeft: 8,
+                  cursor: "pointer",
+                  fontWeight: "normal",
+                  color: "#fff",
+                }}
+                onClick={() => {
+                  const newPills = searchPills.filter(p => p !== pill);
+                  setSearchPills(newPills);
+                  logSearchPillsActivity(newPills, disregardedPills); // Log pill removal
+                  // Clear industry selection and excluded terms if this industry is removed
+                  if (selectedIndustry.toLowerCase() === pill) {
+                    setSelectedIndustry("");
+                    setExcludedTerms([]);
+                  }
+                }}
+                title="Remove"
+              >
+                ×
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
 
-  {disregardedPills.length > 0 && (
-    <div style={{ marginBottom: 12 }}>
-      <span style={{ 
-        fontSize: "0.875rem", 
-        fontWeight: "600", 
-        color: "#dc2626", 
-        marginRight: "12px" 
-      }}>
-        Exclude:
-      </span>
-      {disregardedPills.map((pill) => (
-        <span
-          key={pill}
-          style={{
-            display: "inline-block",
-            background: "#dc2626",
-            color: "#fff",
-            borderRadius: "999px",
-            padding: "6px 16px",
-            marginRight: "8px",
-            fontWeight: "bold",
-            fontSize: "0.95rem",
-            marginBottom: "4px",
-            border: "2px dashed #fff",
-          }}
-        >
-          ✕ {pill}
-          <span
-            style={{
-              marginLeft: 8,
-              cursor: "pointer",
-              fontWeight: "normal",
-              color: "#fff",
-            }}
-            onClick={() => {
-              setDisregardedPills(disregardedPills.filter(p => p !== pill));
-            }}
-            title="Remove"
-          >
-            ×
+      {disregardedPills.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <span style={{
+            fontSize: "0.875rem",
+            fontWeight: "600",
+            color: "#dc2626",
+            marginRight: "12px"
+          }}>
+            Exclude:
           </span>
-        </span>
-      ))}
-    </div>
-  )}
-     {/* Filters */}
-    <div className="job-filters">
-          <input
-            placeholder="Search jobs... (Press Enter to add search pill, Shift+Enter to add disregarded pill)"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === "Enter") {
-                const term = searchTerm.trim().toLowerCase();
-                if (term) {
-                  if (e.shiftKey) {
-                    // Create disregarded pill (exclude jobs with this term)
-                    if (!disregardedPills.includes(term)) {
-                      setDisregardedPills([...disregardedPills, term]);
-                    }
-                  } else {
-                    // Create regular search pill (include jobs with this term)
-                    if (!searchPills.includes(term)) {
-                      const newPills = [...searchPills, term];
-                      setSearchPills(newPills);
-                      logSearchPillsActivity(newPills, disregardedPills); // Log pill addition
-                    }
+          {disregardedPills.map((pill) => (
+            <span
+              key={pill}
+              style={{
+                display: "inline-block",
+                background: "#dc2626",
+                color: "#fff",
+                borderRadius: "999px",
+                padding: "6px 16px",
+                marginRight: "8px",
+                fontWeight: "bold",
+                fontSize: "0.95rem",
+                marginBottom: "4px",
+                border: "2px dashed #fff",
+              }}
+            >
+              ✕ {pill}
+              <span
+                style={{
+                  marginLeft: 8,
+                  cursor: "pointer",
+                  fontWeight: "normal",
+                  color: "#fff",
+                }}
+                onClick={() => {
+                  setDisregardedPills(disregardedPills.filter(p => p !== pill));
+                }}
+                title="Remove"
+              >
+                ×
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      {/* Filters */}
+      <div className="job-filters">
+        <input
+          placeholder="Search jobs... (Press Enter to add search pill, Shift+Enter to add disregarded pill)"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") {
+              const term = searchTerm.trim().toLowerCase();
+              if (term) {
+                if (e.shiftKey) {
+                  // Create disregarded pill (exclude jobs with this term)
+                  if (!disregardedPills.includes(term)) {
+                    setDisregardedPills([...disregardedPills, term]);
+                  }
+                } else {
+                  // Create regular search pill (include jobs with this term)
+                  if (!searchPills.includes(term)) {
+                    const newPills = [...searchPills, term];
+                    setSearchPills(newPills);
+                    logSearchPillsActivity(newPills, disregardedPills); // Log pill addition
                   }
                 }
-                setSearchTerm("");
-                e.preventDefault();
               }
-            }}
-            style={{ flex: 1, padding: "0.75rem", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "1rem" }}
-          />
-        </div>
+              setSearchTerm("");
+              e.preventDefault();
+            }
+          }}
+          style={{ flex: 1, padding: "0.75rem", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "1rem" }}
+        />
+      </div>
 
-  {/* Search Instructions */}
-  <div style={{ 
-    marginBottom: "1rem", 
-    padding: "0.75rem", 
-    background: "#f3f4f6", 
-    borderRadius: "8px", 
-    fontSize: "0.875rem", 
-    color: "#6b7280",
-    border: "1px solid #e5e7eb"
-  }}>
-    <div style={{ marginBottom: "0.25rem" }}>
-      <strong>💡 Search Tips:</strong>
-    </div>
-    <div>
-      • Press <kbd style={{ 
-        padding: "2px 6px", 
-        background: "#fff", 
-        border: "1px solid #d1d5db", 
-        borderRadius: "4px", 
-        fontSize: "0.75rem" 
-      }}>Enter</kbd> to add search terms that <span style={{ color: "#4f46e5", fontWeight: "600" }}>include</span> jobs
-    </div>
-    <div>
-      • Press <kbd style={{ 
-        padding: "2px 6px", 
-        background: "#fff", 
-        border: "1px solid #d1d5db", 
-        borderRadius: "4px", 
-        fontSize: "0.75rem" 
-      }}>Shift + Enter</kbd> to add terms that <span style={{ color: "#dc2626", fontWeight: "600" }}>exclude</span> jobs
-    </div>
-  </div>
-
-  {/* Add Job Button - Only show for users with proper clearance */}
-  {user && hasAddJobPermission(user, userClearance) && (
-    <div style={{ 
-      display: "flex", 
-      justifyContent: "center", 
-      marginBottom: "1rem" 
-    }}>
-      <button
-        onClick={() => setShowAddJobForm(true)}
-        style={{
-          padding: "12px 24px",
-          borderRadius: "8px",
-          background: "#10b981",
-          color: "#fff",
-          fontWeight: "600",
-          border: "none",
-          fontSize: "1rem",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)"
-        }}
-      >
-        <span style={{ fontSize: "1.2rem" }}>+</span>
-        Add New Job
-      </button>
-    </div>
-  )}
-
-  {hasMore && (
-    <button
-      onClick={() => setPage(page + 1)}
-      style={{
-        margin: "2rem auto",
-        display: "block",
-        padding: "12px 32px",
+      {/* Search Instructions */}
+      <div style={{
+        marginBottom: "1rem",
+        padding: "0.75rem",
+        background: "#f3f4f6",
         borderRadius: "8px",
-        background: "#4f46e5",
-        color: "#fff",
-        fontWeight: "bold",
-        border: "none",
-        fontSize: "1.1rem",
-        cursor: "pointer",
-      }}
-    >
-      Load More
-    </button>
-  )}
-            {/* Job List */}
-        <div className="job-list">
-          {filteredJobs.map((job) => (
-            <div className="job-card" key={job.UNIQUE_ID}>
-              <div className="job-main">
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                  <h3 style={{ margin: 0 }}>{job.Title}</h3>
-                  {isJobNew(job) && (
-                    <span
-                      style={{
-                        backgroundColor: "#10b981",
-                        color: "white",
-                        fontSize: "0.75rem",
-                        fontWeight: "bold",
-                        padding: "2px 8px",
-                        borderRadius: "12px",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.5px",
+        fontSize: "0.875rem",
+        color: "#6b7280",
+        border: "1px solid #e5e7eb"
+      }}>
+        <div style={{ marginBottom: "0.25rem" }}>
+          <strong>💡 Search Tips:</strong>
+        </div>
+        <div>
+          • Press <kbd style={{
+            padding: "2px 6px",
+            background: "#fff",
+            border: "1px solid #d1d5db",
+            borderRadius: "4px",
+            fontSize: "0.75rem"
+          }}>Enter</kbd> to add search terms that <span style={{ color: "#4f46e5", fontWeight: "600" }}>include</span> jobs
+        </div>
+        <div>
+          • Press <kbd style={{
+            padding: "2px 6px",
+            background: "#fff",
+            border: "1px solid #d1d5db",
+            borderRadius: "4px",
+            fontSize: "0.75rem"
+          }}>Shift + Enter</kbd> to add terms that <span style={{ color: "#dc2626", fontWeight: "600" }}>exclude</span> jobs
+        </div>
+      </div>
+
+      {/* Add Job Button - Only show for users with proper clearance */}
+      {user && hasAddJobPermission(user, userClearance) && (
+        <div style={{
+          display: "flex",
+          justifyContent: "center",
+          marginBottom: "1rem"
+        }}>
+          <button
+            onClick={() => setShowAddJobForm(true)}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "8px",
+              background: "#10b981",
+              color: "#fff",
+              fontWeight: "600",
+              border: "none",
+              fontSize: "1rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)"
+            }}
+          >
+            <span style={{ fontSize: "1.2rem" }}>+</span>
+            Add New Job
+          </button>
+        </div>
+      )}
+
+      {hasMore && (
+        <button
+          onClick={() => setPage(page + 1)}
+          style={{
+            margin: "2rem auto",
+            display: "block",
+            padding: "12px 32px",
+            borderRadius: "8px",
+            background: "#4f46e5",
+            color: "#fff",
+            fontWeight: "bold",
+            border: "none",
+            fontSize: "1.1rem",
+            cursor: "pointer",
+          }}
+        >
+          Load More
+        </button>
+      )}
+
+
+      {/* Job List */}
+      <div className="job-list">
+        {paginatedJobs.map((job) => (
+          <div className="job-card" key={job.UNIQUE_ID}>
+            <div className="job-main">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                <h3 style={{ margin: 0 }}>{job.Title}</h3>
+                {isJobNew(job) && (
+                  <span
+                    style={{
+                      backgroundColor: "#10b981",
+                      color: "white",
+                      fontSize: "0.75rem",
+                      fontWeight: "bold",
+                      padding: "2px 8px",
+                      borderRadius: "12px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    New
+                  </span>
+                )}
+                {(job.source === 'allGigs' || job.tags?.includes('allGigs')) && (
+                  <span
+                    style={{
+                      backgroundColor: "#4f46e5",
+                      color: "white",
+                      fontSize: "0.75rem",
+                      fontWeight: "bold",
+                      padding: "2px 8px",
+                      borderRadius: "12px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    allGigs
+                  </span>
+                )}
+              </div>
+              <p><strong>Company:</strong> {job.Company}</p>
+              <p><strong>Location:</strong> {job.Location}</p>
+              <p><strong>Rate:</strong> {job.rate}</p>
+              <p><strong>Date:</strong> {job.date}</p>
+              <p><strong>Summary:</strong> {job.Summary}</p>
+
+              {/* Show poster information for allGigs jobs */}
+              {(job.source === 'allGigs' || job.tags?.includes('allGigs')) && job.added_by_email && (
+                <div style={{
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "6px",
+                  padding: "0.75rem",
+                  marginTop: "0.75rem"
+                }}>
+                  <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.875rem", fontWeight: "600", color: "#374151" }}>
+                    Contact Information:
+                  </p>
+                  <p style={{ margin: "0 0 0.25rem 0", fontSize: "0.875rem" }}>
+                    <strong>Name:</strong> {job.poster_name || 'Not provided'}
+                  </p>
+                  <p style={{ margin: 0, fontSize: "0.875rem" }}>
+                    <strong>Email:</strong> {job.added_by_email}
+                  </p>
+                </div>
+              )}
+
+              {/* View Job button - different behavior for allGigs vs external jobs */}
+              {job.URL && (
+                <>
+                  {(job.source === 'allGigs' || job.tags?.includes('allGigs')) ? (
+                    <button
+                      className="view-job-btn"
+                      onClick={() => {
+                        logJobClick(job);
+                        // For allGigs jobs, show contact info (already visible above)
+                        alert(`To apply for this job, please contact:\n\nName: ${job.poster_name || 'Not provided'}\nEmail: ${job.added_by_email}\n\nYou can also see the contact information above.`);
                       }}
-                    >
-                      New
-                    </span>
-                  )}
-                  {(job.source === 'allGigs' || job.tags?.includes('allGigs')) && (
-                    <span
                       style={{
                         backgroundColor: "#4f46e5",
                         color: "white",
-                        fontSize: "0.75rem",
-                        fontWeight: "bold",
-                        padding: "2px 8px",
-                        borderRadius: "12px",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.5px",
+                        border: "none",
+                        padding: "8px 16px",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        fontWeight: "500",
+                        marginTop: "0.75rem"
                       }}
                     >
-                      allGigs
-                    </span>
+                      View Contact Info
+                    </button>
+                  ) : (
+                    <a
+                      href={job.URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="view-job-btn"
+                      onClick={() => logJobClick(job)}
+                    >
+                      View Job
+                    </a>
                   )}
-                </div>
-                <p><strong>Company:</strong> {job.Company}</p>
-                <p><strong>Location:</strong> {job.Location}</p>
-                <p><strong>Rate:</strong> {job.rate}</p>
-                <p><strong>Date:</strong> {job.date}</p>
-                <p><strong>Summary:</strong> {job.Summary}</p>
-                
-                {/* Show poster information for allGigs jobs */}
-                {(job.source === 'allGigs' || job.tags?.includes('allGigs')) && job.added_by_email && (
-                  <div style={{
-                    backgroundColor: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "6px",
-                    padding: "0.75rem",
-                    marginTop: "0.75rem"
-                  }}>
-                    <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.875rem", fontWeight: "600", color: "#374151" }}>
-                      Contact Information:
-                    </p>
-                    <p style={{ margin: "0 0 0.25rem 0", fontSize: "0.875rem" }}>
-                      <strong>Name:</strong> {job.poster_name || 'Not provided'}
-                    </p>
-                    <p style={{ margin: 0, fontSize: "0.875rem" }}>
-                      <strong>Email:</strong> {job.added_by_email}
-                    </p>
-                  </div>
-                )}
-
-                {/* View Job button - different behavior for allGigs vs external jobs */}
-                {job.URL && (
-                  <>
-                    {(job.source === 'allGigs' || job.tags?.includes('allGigs')) ? (
-                      <button
-                        className="view-job-btn"
-                        onClick={() => {
-                          logJobClick(job);
-                          // For allGigs jobs, show contact info (already visible above)
-                          alert(`To apply for this job, please contact:\n\nName: ${job.poster_name || 'Not provided'}\nEmail: ${job.added_by_email}\n\nYou can also see the contact information above.`);
-                        }}
-                        style={{
-                          backgroundColor: "#4f46e5",
-                          color: "white",
-                          border: "none",
-                          padding: "8px 16px",
-                          borderRadius: "4px",
-                          cursor: "pointer",
-                          fontSize: "14px",
-                          fontWeight: "500",
-                          marginTop: "0.75rem"
-                        }}
-                      >
-                        View Contact Info
-                      </button>
-                    ) : (
-                      <a
-                        href={job.URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="view-job-btn"
-                        onClick={() => logJobClick(job)}
-                      >
-                        View Job
-                      </a>
-                    )}
-                  </>
-                )}
-                <div className="job-id">ID: {job.UNIQUE_ID.slice(-6)}</div>
-              </div>
+                </>
+              )}
+              <div className="job-id">ID: {job.UNIQUE_ID.slice(-6)}</div>
             </div>
-          ))}
-        </div>
-
-        {/* Add Job Form Modal */}
-        {showAddJobForm && user && (
-          <AddJobForm
-            onClose={() => setShowAddJobForm(false)}
-            onJobAdded={refreshJobs}
-            user={user}
-          />
-        )}
+          </div>
+        ))}
       </div>
-    )
-  }
+
+      {/* Add Job Form Modal */}
+      {showAddJobForm && user && (
+        <AddJobForm
+          onClose={() => setShowAddJobForm(false)}
+          onJobAdded={refreshJobs}
+          user={user}
+        />
+      )}
+
+      {/* Pagination */}
+      {filteredJobs.length > 0 && (
+        <div style={{ textAlign: "center", marginTop: "2rem" }}>
+          <button onClick={() => setPage(0)} disabled={page === 0}>« First</button>
+          <button onClick={() => setPage(prev => Math.max(prev - 1, 0))} disabled={page === 0}>← Prev</button>
+
+          {pageNumbers.map(num => (
+            <button
+              key={num}
+              onClick={() => setPage(num)}
+              style={{
+                fontWeight: num === page ? "bold" : "normal",
+                backgroundColor: num === page ? "#4f46e5" : "#fff",
+                color: num === page ? "#fff" : "#000",
+                margin: "0 4px",
+                padding: "6px 10px",
+                borderRadius: "6px",
+                border: "1px solid #ddd",
+                cursor: "pointer"
+              }}
+            >
+              {num + 1}
+            </button>
+          ))}
+
+          <button onClick={() => setPage(prev => Math.min(prev + 1, totalPages - 1))} disabled={page === totalPages - 1}>→ Next</button>
+          <button onClick={() => setPage(totalPages - 1)} disabled={page === totalPages - 1}>» Last</button>
+        </div>
+      )}
+
+
+    </div>
+  )
+}
+
